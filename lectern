@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# lectern-local: MkDocs hub manager without systemd
+set -euo pipefail
+shopt -s nullglob
+HUB="$(dirname "$(readlink -f "$0")")"
+AVAIL="$HUB/projects"; DOCS="$HUB/docs"
+PIDFILE="$HUB/.lectern.pid"; LOG="$HUB/.lectern.log"
+ADDR="${LECTERN_ADDR:-$(grep -m1 '^dev_addr:' "$HUB/base.yml" 2>/dev/null | cut -d: -f2- | tr -d " \"'" || true)}"
+ADDR="${LECTERN_ADDR:-127.0.0.1:8000}"
+if [[ -x $HUB/.venv/bin/mkdocs ]]; then MKDOCS="$HUB/.venv/bin/mkdocs"; else MKDOCS=mkdocs; fi
+mkdir -p "$AVAIL" "$DOCS"
+
+running() { [[ -f $PIDFILE ]] && kill -0 "$(<"$PIDFILE")" 2>/dev/null; }
+
+start() {
+  running && { echo "Already running (pid $(<"$PIDFILE")) at http://$ADDR"; return; }
+  (cd "$HUB" && exec nohup "$MKDOCS" serve -a "$ADDR" >"$LOG" 2>&1) &
+  echo $! > "$PIDFILE"
+  sleep 1
+  if running; then echo "Started at http://$ADDR (pid $!)"
+  else echo "Failed to start:"; tail -n 20 "$LOG"; rm -f "$PIDFILE"; exit 1; fi
+}
+
+stop() {
+  running || { echo "Not running"; rm -f "$PIDFILE"; return; }
+  local pid; pid=$(<"$PIDFILE"); kill "$pid"
+  for _ in {1..50}; do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  rm -f "$PIDFILE"; echo "Stopped"
+}
+gen_index() {
+  local idx="$DOCS/index.md" list="" n target
+  for l in "$DOCS"/*; do
+    [[ -L $l && -e $l ]] || continue
+    n=$(basename "$l"); target=""
+    for f in index.md README.md; do [[ -f $l/$f ]] && { target="$n/$f"; break; }; done
+    [[ -z $target ]] && target=$(cd "$l" && find . -maxdepth 2 -name '*.md' | sort | head -n1 | sed "s|^\./|$n/|" || true)
+    if [[ -n $target ]]; then list+="- [$n]($target)"$'\n'
+    else list+="- $n (no Markdown files)"$'\n'; fi
+  done
+  [[ -f $idx ]] || printf '# Projects\n\n<!-- lectern:start -->\n<!-- lectern:end -->\n' > "$idx"
+  grep -q '<!-- lectern:start -->' "$idx" || printf '\n<!-- lectern:start -->\n<!-- lectern:end -->\n' >> "$idx"
+  LIST="$list" awk '
+    /<!-- lectern:start -->/ { print; printf "%s", ENVIRON["LIST"]; skip=1; next }
+    /<!-- lectern:end -->/   { skip=0 }
+    !skip' "$idx" > "$idx.tmp" && mv "$idx.tmp" "$idx"
+}
+
+regen() {
+  gen_index
+  if running; then stop >/dev/null; start; fi
+}
+
+case "${1:-}" in
+  add)     ln -sfn "$(readlink -f "$3")" "$AVAIL/$2"; ln -sfn "$AVAIL/$2" "$DOCS/$2"; regen ;;
+  remove)  rm -f "$DOCS/$2" "$AVAIL/$2"; regen ;;
+  enable)  [[ -e $AVAIL/$2 ]] || { echo "unknown or broken: $2"; exit 1; }
+           ln -sfn "$AVAIL/$2" "$DOCS/$2"; regen ;;
+  disable) rm -f "$DOCS/$2"; regen ;;
+  list)    for p in "$AVAIL"/*; do n=$(basename "$p")
+             s=$([[ -L $DOCS/$n ]] && echo on || echo off); [[ -e $p ]] || s=BROKEN
+             printf '%-8s %-20s %s\n' "$s" "$n" "$(readlink "$p")"; done ;;
+  start)   start ;;
+  stop)    stop ;;
+  restart) stop >/dev/null; start ;;
+  status)  if running; then echo "Running (pid $(<"$PIDFILE")) at http://$ADDR"; else echo "Not running"; fi ;;
+  logs)    exec tail -f "$LOG" ;;
+  serve)   running && { echo "Background instance running; stop it first"; exit 1; }
+           cd "$HUB" && exec "$MKDOCS" serve -a "$ADDR" ;;
+  *)       echo "usage: lectern add <name> <path> | remove|enable|disable <name> | list | start|stop|restart|status|logs|serve" ;;
+esac

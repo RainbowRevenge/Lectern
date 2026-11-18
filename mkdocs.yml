@@ -1,0 +1,42 @@
+dev_addr: 127.0.0.1:8000
+site_name: My Docs
+theme:
+  name: material
+  palette:
+    - scheme: default
+      toggle: { icon: material/brightness-7, name: Dark mode }
+    - scheme: slate
+      toggle: { icon: material/brightness-4, name: Light mode }
+  features:
+    - navigation.instant          # no full page reloads
+    - navigation.instant.progress
+    - navigation.tracking         # URL follows the heading you're on
+    - navigation.tabs             # one top tab per project
+    - navigation.indexes
+    - navigation.path             # breadcrumbs
+    - navigation.footer           # prev/next links
+    - navigation.top              # back-to-top button
+    - toc.follow                  # TOC scrolls with long specs
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.tasklist:            # BMAD stories use checkboxes
+      custom_checkbox: true
+  - pymdownx.superfences:         # renders Mermaid diagrams in architecture docs
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+extra_css:
+  - status.css
+extra:
+  status:
+    done: Recently added
