@@ -1,4 +1,5 @@
 .lectern.pid
 .lectern.log
-docs
+docs/*
 projects
+!docs/status.css

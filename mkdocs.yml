@@ -39,4 +39,16 @@ extra_css:
   - status.css
 extra:
   status:
-    done: Recently added
+    backlog: Backlog
+    draft: Draft
+    approved: Approved
+    ready-for-dev: Ready for dev
+    in-progress: In progress
+    review: Review
+    done: Done
+    final: Final
+    blocked: Blocked
+    on-hold: On hold
+    cancelled: Cancelled
+    archived: Archived
+    completed: Completed
